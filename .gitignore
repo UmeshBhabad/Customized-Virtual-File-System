@@ -39,3 +39,7 @@
 
 # debug information files
 *.dwo
+
+# personal pdf and txt files
+*.pdf
+*.txt

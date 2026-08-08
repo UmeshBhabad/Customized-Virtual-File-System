@@ -175,7 +175,7 @@ void InitialiseUAREA()
    {
         uareaobj.UFDT[i] = NULL;
    }
-    printf("CVFS : UAREA gets initialised succesfully\n");
+    printf("CVFS : UAREA initialised successfully\n");
 }
 
 //////////////////////////////////////////////////////////
@@ -192,7 +192,7 @@ void InitialiseSuperBlock()
     superobj.TotalInodes = MAXINODE;
     superobj.FreeInodes = MAXINODE;
 
-    printf("CVFS : Super block gets initialised succesfully\n");
+    printf("CVFS : Super block initialised successfully\n");
 }
 
 //////////////////////////////////////////////////////////
@@ -236,7 +236,7 @@ void CreateDILB()
         }
     }
 
-    printf("CVFS : DILB created succesfully\n");
+    printf("CVFS : DILB created successfully\n");
 }
 
 //////////////////////////////////////////////////////////
@@ -251,7 +251,7 @@ void CreateDILB()
 
 void StartAuxillaryDataInitilisation()
 {
-    strcpy(bootobj.Information,"Booting process of Marvellous CVFS is done");
+    strcpy(bootobj.Information,"Booting process of CVFS is done");
 
     printf("%s\n",bootobj.Information);
 
@@ -261,7 +261,7 @@ void StartAuxillaryDataInitilisation()
 
     InitialiseUAREA();
 
-    printf("CVFS : Auxillary data initialised succesfully\n");
+    printf("CVFS : Auxiliary data initialised successfully\n");
 }
 
 //////////////////////////////////////////////////////////
@@ -286,7 +286,7 @@ void DisplayHelp()
     printf("read   : It is used to read the data from the file\n");
     printf("stat   : It is used to display statistical information\n");
     printf("unlink : It is used to delete the file\n");
-    printf("exit   : It is used to terminate Marvellous CVFS\n");
+    printf("exit   : It is used to terminate CVFS\n");
 
     printf("-----------------------------------------------\n");
 
@@ -312,7 +312,7 @@ void ManPageDisplay(char Name[])
     {
         printf("About : It is used to display manual page\n");
         printf("Usage : man command_name\n");
-        printf("command_name : It is the name of command\n");        
+        printf("command_name : It is the name of command\n");
     }
     else if(strcmp("exit",Name) == 0)
     {
@@ -323,6 +323,12 @@ void ManPageDisplay(char Name[])
     {
         printf("About : It is used to clear the shell\n");
         printf("Usage : clear\n");        
+    }
+    else if(strcmp("stat",Name) == 0)
+    {
+        printf("About : It is used to display statistical information about a file\n");
+        printf("Usage : stat filename\n");
+        printf("filename : Name of the file to inspect\n");
     }
     else
     {
@@ -462,7 +468,7 @@ int CreateFile(
 
     // Allocate ememory for files data
     uareaobj.UFDT[i]->ptrinode->Buffer = (char *)malloc(MAXFILESIZE);
-
+    memset(uareaobj.UFDT[i]->ptrinode->Buffer, 0, MAXFILESIZE);
     superobj.FreeInodes--;
 
     return i;   // File descriptor
@@ -500,6 +506,49 @@ void LsFile()
     
     printf("-----------------------------------------------\n");
 
+}
+//////////////////////////////////////////////////////////
+//
+//  Function Name :     StatFile()
+//  Description :       It is used to display statistical information
+//                      about a single file (inode number, size,
+//                      permission, reference count)
+//  Input :             File name
+//  Output :            EXECUTE_SUCCESS or ERR_FILE_NOT_EXIST
+//  Author :            Umesh Shivaji Bhabad
+//  Date    :           09/08/2026
+//
+//////////////////////////////////////////////////////////
+
+int StatFile(char *name)
+{
+    PINODE temp = head;
+
+    if(name == NULL)
+    {
+        return ERR_INVALID_PARAMETER;
+    }
+
+    while(temp != NULL)
+    {
+        if((temp->FileType != 0) && (strcmp(temp->FileName, name) == 0))
+        {
+            printf("-----------------------------------------------\n");
+            printf("Inode Number      : %d\n", temp->InodeNumber);
+            printf("File Name         : %s\n", temp->FileName);
+            printf("File Size (max)   : %d\n", temp->FileSize);
+            printf("Actual File Size  : %d\n", temp->ActualFileSize);
+            printf("Permission        : %d\n", temp->Permission);
+            printf("Reference Count   : %d\n", temp->ReferenceCount);
+            printf("-----------------------------------------------\n");
+
+            return EXECUTE_SUCCESS;
+        }
+
+        temp = temp->next;
+    }
+
+    return ERR_FILE_NOT_EXIST;
 }
 
 //////////////////////////////////////////////////////////
@@ -688,6 +737,26 @@ int ReadFile(
 
     return size;
 }
+//////////////////////////////////////////////////////////
+//
+//  Function Name :     DiscardStdinLine
+//  Description :       Safely discards any leftover characters still
+//                      sitting in stdin up to (and including) the next
+//                      newline, or end-of-file.
+//  Author :            Umesh Shivaji Bhabad
+//  Date :              09/08/2026
+//
+//////////////////////////////////////////////////////////
+
+void DiscardStdinLine()
+{
+    int ch = 0;
+
+    while((ch = getchar()) != '\n' && ch != EOF)
+    {
+        // discard
+    }
+}
 
 //////////////////////////////////////////////////////////
 //
@@ -715,16 +784,17 @@ int main()
     // Infinite Listening Shell
     while(1)
     {
-        fflush(stdin);
-
         strcpy(str,"");
 
         printf("\nCVFS : > ");
         fgets(str,sizeof(str),stdin);
+
+        if(strchr(str, '\n') == NULL)
+        {
+            DiscardStdinLine();
+        }
         
         iCount = sscanf(str,"%s %s %s %s %s",Command[0],Command[1],Command[2],Command[3], Command[4]);
-
-        fflush(stdin);
 
         if(iCount == 1)
         {
@@ -763,8 +833,9 @@ int main()
             {
                 ManPageDisplay(Command[1]);
             }
+            
             // CVFS : > unlink Demo.txt
-            if(strcmp("unlink",Command[0]) == 0)
+            else if(strcmp("unlink",Command[0]) == 0)
             {
                 iRet = UnlinkFile(Command[1]);
             
@@ -812,6 +883,20 @@ int main()
                     printf("%d bytes gets succesfully written\n",iRet);
                 }
             }
+            // stat Demo.txt
+            else if(strcmp("stat",Command[0]) == 0)
+            {
+                iRet = StatFile(Command[1]);
+
+                if(iRet == ERR_INVALID_PARAMETER)
+                {
+                    printf("Error : Invalid parameter\n");
+                }
+                else if(iRet == ERR_FILE_NOT_EXIST)
+                {
+                    printf("Error : There is no such file\n");
+                }
+            }
             else
             {
                 printf("There is no such command\n");
@@ -849,30 +934,37 @@ int main()
                 printf("File gets succesfully created with FD %d\n",iRet);
             } 
             // CVFS : > read 3 10
-            if(strcmp("read",Command[0]) == 0)
+            else if(strcmp("read",Command[0]) == 0)
             {
-                EmptyBuffer = (char *)malloc(sizeof(atoi(Command[2])));
+                int ReadSize = atoi(Command[2]);
+                EmptyBuffer = (char *)malloc(ReadSize + 1);
 
-                iRet = ReadFile(atoi(Command[1]), EmptyBuffer, atoi(Command[2]));
+                iRet = ReadFile(atoi(Command[1]), EmptyBuffer, ReadSize);
 
                 if(iRet == ERR_INVALID_PARAMETER)
                 {
                     printf("Error : Invalid parameter\n");
+                    free(EmptyBuffer);
                 }
                 else if(iRet == ERR_FILE_NOT_EXIST)
                 {
                     printf("Error : File not exist\n");
+                    free(EmptyBuffer);
                 }
                 else if(iRet == ERR_PERMISSION_DENIED)
                 {
                     printf("Error : Permission denied\n");
+                    free(EmptyBuffer);
                 }
                 else if(iRet == ERR_INSUFFICIENT_DATA)
                 {
                     printf("Error : Insufficient data\n");
+                    free(EmptyBuffer);
                 }
                 else
                 {
+                    EmptyBuffer[iRet] = '\0';
+                    
                     printf("Read operation is succesful\n");
                     printf("Data from file is : %s\n",EmptyBuffer);
 
