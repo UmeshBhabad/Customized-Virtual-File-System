@@ -285,6 +285,7 @@ void DisplayHelp()
     printf("write  : It is used to write the data into file\n");
     printf("read   : It is used to read the data from the file\n");
     printf("stat   : It is used to display statistical information\n");
+    printf("seek   : It is used to reposition the read/write offset\n");
     printf("unlink : It is used to delete the file\n");
     printf("exit   : It is used to terminate CVFS\n");
 
@@ -329,6 +330,14 @@ void ManPageDisplay(char Name[])
         printf("About : It is used to display statistical information about a file\n");
         printf("Usage : stat filename\n");
         printf("filename : Name of the file to inspect\n");
+    }
+    else if(strcmp("seek",Name) == 0)
+    {
+        printf("About : It is used to reposition a file's read/write offset\n");
+        printf("Usage : seek fd offset whence\n");
+        printf("fd     : File descriptor returned by creat\n");
+        printf("offset : Number of bytes to move (can be negative for CURRENT/END)\n");
+        printf("whence : 0 = START, 1 = CURRENT, 2 = END\n");
     }
     else
     {
@@ -737,6 +746,82 @@ int ReadFile(
 
     return size;
 }
+
+//////////////////////////////////////////////////////////
+//
+//  Function Name :     SeekFile()
+//  Description :       It is used to reposition a file's read/write
+//                      offset, without reading or writing any data -
+//                      analogous to POSIX lseek().
+//  Input :             File descriptor, offset, whence (START/CURRENT/END)
+//  Output :            The new absolute offset on success, or a
+//                      negative error code
+// Author :             Umesh Shivaji Bhabad
+// Date :               10/08/2008
+//
+//////////////////////////////////////////////////////////
+
+/*
+ Design note : this project tracks ReadOffset and WriteOffset as two
+ INDEPENDENT cursors per open file (a deliberate simplification from
+ real Unix, where a single open-file-description has one shared
+ offset used by both read and write). To keep 'seek' behavior simple
+ and predictable given that existing design, this implementation
+ repositions BOTH ReadOffset and WriteOffset to the same computed
+ position. CURRENT is interpreted relative to ReadOffset, since that
+ is this project's "primary" cursor reference.
+*/
+
+int SeekFile(
+                int fd,
+                int offset,
+                int whence
+            )
+{
+    int NewPosition = 0;
+
+    // Invalid FD
+    if(fd < 0 || fd > MAXOPENFILES)
+    {
+        return ERR_INVALID_PARAMETER;
+    }
+
+    // FD points to NULL
+    if(uareaobj.UFDT[fd] == NULL)
+    {
+        return ERR_FILE_NOT_EXIST;
+    }
+
+    switch(whence)
+    {
+        case START:
+            NewPosition = offset;
+            break;
+
+        case CURRENT:
+            NewPosition = uareaobj.UFDT[fd]->ReadOffset + offset;
+            break;
+
+        case END:
+            NewPosition = uareaobj.UFDT[fd]->ptrinode->ActualFileSize + offset;
+            break;
+
+        default:
+            return ERR_INVALID_PARAMETER;
+    }
+
+    // Resulting position must stay within the file's allocated bounds
+    if(NewPosition < 0 || NewPosition > MAXFILESIZE)
+    {
+        return ERR_INVALID_PARAMETER;
+    }
+
+    uareaobj.UFDT[fd]->ReadOffset = NewPosition;
+    uareaobj.UFDT[fd]->WriteOffset = NewPosition;
+
+    return NewPosition;
+}
+
 //////////////////////////////////////////////////////////
 //
 //  Function Name :     DiscardStdinLine
@@ -978,7 +1063,31 @@ int main()
         } // End of else if 3
         else if(iCount == 4)
         {
+            // CVFS : > seek 3 10 0
+            if(strcmp("seek",Command[0]) == 0)
+            {
+                int Offset = atoi(Command[2]);
+                int Whence = atoi(Command[3]);
 
+                iRet = SeekFile(atoi(Command[1]), Offset, Whence);
+
+                if(iRet == ERR_INVALID_PARAMETER)
+                {
+                    printf("Error : Invalid parameter\n");
+                }
+                else if(iRet == ERR_FILE_NOT_EXIST)
+                {
+                    printf("Error : There is no such file\n");
+                }
+                else
+                {
+                    printf("Seek successful. New offset : %d\n",iRet);
+                }
+            }
+            else
+            {
+                printf("There is no such command\n");
+            }
         } // End of else if 4
         else
         {
